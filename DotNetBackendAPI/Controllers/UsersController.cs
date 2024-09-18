@@ -95,6 +95,7 @@ namespace Personal_info_API.Controllers
                     PermanentAddress = userDto.PermanentAddress,
                     PhoneNumber = userDto.PhoneNumber,
                     EmailAddress = userDto.EmailAddress,
+
                     MaritalStatus = userDto.MaritalStatus,
                     Gender = userDto.Gender,
                     Occupation = userDto.Occupation,

@@ -90,23 +90,69 @@ namespace Personal_info_API.Dao
         }
 
 
+        //public async Task<int> DeleteUserById(int id)
+        //{
+        //    string deleteQuery = "DELETE FROM personal_info.userdata WHERE id = @id";
+        //    try
+        //    {
+        //        using (_conn)
+        //        {
+        //            await _conn.OpenAsync();
+        //            NpgsqlCommand deleteCommand = new NpgsqlCommand(deleteQuery, _conn);
+        //            deleteCommand.CommandType = CommandType.Text;
+        //            deleteCommand.Parameters.AddWithValue("@id", id);
+
+        //            int rowDeleted = await deleteCommand.ExecuteNonQueryAsync();
+        //            return rowDeleted;
+        //        }
+        //    }
+
+        //    catch (NpgsqlException e)
+        //    {
+        //        Console.WriteLine("---------Exception--------------" + e.Message);
+        //    }
+        //    return 0;
+        //}
+
+
         public async Task<int> DeleteUserById(int id)
         {
+            string selectQuery = "SELECT image FROM personal_info.userdata WHERE id = @id";
             string deleteQuery = "DELETE FROM personal_info.userdata WHERE id = @id";
+            string imagePath = string.Empty;
+
             try
             {
                 using (_conn)
                 {
                     await _conn.OpenAsync();
+                    // Retrieve the image path first
+                    NpgsqlCommand selectCommand = new NpgsqlCommand(selectQuery, _conn);
+                    selectCommand.CommandType = CommandType.Text;
+                    selectCommand.Parameters.AddWithValue("@id", id);
+                    var reader = await selectCommand.ExecuteReaderAsync();
+                    if (reader.Read())
+                    {
+                        imagePath = reader["image"].ToString();
+                    }
+                    reader.Close();
+
+                    // Delete the user from the database
                     NpgsqlCommand deleteCommand = new NpgsqlCommand(deleteQuery, _conn);
                     deleteCommand.CommandType = CommandType.Text;
                     deleteCommand.Parameters.AddWithValue("@id", id);
 
                     int rowDeleted = await deleteCommand.ExecuteNonQueryAsync();
+
+                    // Delete the image from the file system if the user was deleted
+                    if (rowDeleted > 0 && !string.IsNullOrEmpty(imagePath))
+                    {   
+                        DeleteImageFromFileSystem(imagePath);
+                    }
+
                     return rowDeleted;
                 }
             }
-
             catch (NpgsqlException e)
             {
                 Console.WriteLine("---------Exception--------------" + e.Message);
@@ -216,13 +262,9 @@ namespace Personal_info_API.Dao
                 Directory.CreateDirectory(folderPath);
             }
 
-            // Extract the original file name (without extension)
             var originalFileName = Path.GetFileNameWithoutExtension(imageFile.FileName);
-
-            // Create a unique file name by appending the timestamp
             var timestamp = DateTime.Now.ToString("yyyyMMddHHmmss");
             var fileName = $"{originalFileName}_{timestamp}{Path.GetExtension(imageFile.FileName)}";
-            // Combine the folder path and file name
             var filePath = Path.Combine(folderPath, fileName);
 
             // Save the image file
@@ -231,9 +273,42 @@ namespace Personal_info_API.Dao
                 await imageFile.CopyToAsync(stream);
             }
 
-            // Return the relative image path to save in the database
+            // Return the relative image path
             return $"Image/{fileName}";
         }
+
+
+        private void DeleteImageFromFileSystem(string imagePath)
+        {
+            try
+            {
+                string correctedImagePath = imagePath.Replace("Image/", "").TrimStart('/');
+                var fullImagePath = Path.Combine(Directory.GetCurrentDirectory(), "Images", correctedImagePath);
+
+                if (File.Exists(fullImagePath))
+                {
+                    // Log before deleting
+                    Console.WriteLine($"Attempting to delete file: {fullImagePath}");
+
+                    // Force deletion
+                    File.SetAttributes(fullImagePath, FileAttributes.Normal);
+                    File.Delete(fullImagePath);
+
+                    Console.WriteLine("File deleted successfully.");
+                }
+                else
+                {
+                    Console.WriteLine("File not found: " + fullImagePath);
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error while deleting file: {ex.Message}");
+            }
+        }
+
+
+
 
 
     }
